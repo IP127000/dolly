@@ -20,4 +20,4 @@ tokenizer = old_tokenizer.train_new_from_iterator(
 )
 
 
-tokenizer.save_pretrained("new_tokenizer2")
+tokenizer.save_pretrained("tokenizer_file/new_tokenizer2")
