@@ -21,3 +21,5 @@ LLM-Dolly is a custom LLM built from scratch
 
 - [HelloWorld：tokenizer](https://zhuanlan.zhihu.com/p/657047389)
 - [NLP从0到1之HuggingFace实战](https://zhuanlan.zhihu.com/p/690019010)
+- [huggingface transformers](https://github.com/huggingface/transformers)
+- [Qwen](https://huggingface.co/Qwen)
