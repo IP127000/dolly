@@ -17,3 +17,4 @@ tokenizers==0.21.1
 tqdm==4.67.1
 typing_extensions==4.13.2
 urllib3==2.4.0
+torch==2.3.0
