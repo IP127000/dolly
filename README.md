@@ -3,6 +3,9 @@ LLM-Dolly is a custom LLM built from scratch
 
 ## 🗓️ 更新日志
 
+#### 2025-05-06
+- 📝 实现 Dolly_configuration类,添加第一版modeling——dolly。
+
 #### 2025-04-30
 - 📝 添加Tokenizer的BBPE方式训练。
 
