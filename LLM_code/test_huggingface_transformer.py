@@ -1,7 +1,7 @@
 import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers import LlamaForCausalLM
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+# tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 from transformers import LlamaConfig
 config = LlamaConfig(
     vocab_size=32000,  
@@ -12,7 +12,6 @@ config = LlamaConfig(
 )
 
 model = LlamaForCausalLM(config)
-
-model = transformers.Qwen2ForCausalLM(config)
+# model = transformers.Qwen2ForCausalLM(config)
 model_size = sum(t.numel() for t in model.parameters())
 print(f"Model Size: {model_size/1000**2:.1f}M parameters")
