@@ -4,7 +4,7 @@ LLM-Dolly is a custom LLM built from scratch
 ## 🗓️ 更新日志
 
 #### 2025-05-06
-- 📝 实现 Dolly_configuration类,添加第一版modeling_dolly。
+- 📝 实现 onfiguration_dolly类,以及添加第一版modeling_dolly。
 
 #### 2025-04-30
 - 📝 添加Tokenizer的BBPE方式训练。
@@ -21,5 +21,5 @@ LLM-Dolly is a custom LLM built from scratch
 
 - [HelloWorld：tokenizer](https://zhuanlan.zhihu.com/p/657047389)
 - [NLP从0到1之HuggingFace实战](https://zhuanlan.zhihu.com/p/690019010)
-- [huggingface transformers](https://github.com/huggingface/transformers)
+- [Huggingface transformers](https://github.com/huggingface/transformers)
 - [Qwen](https://huggingface.co/Qwen)
