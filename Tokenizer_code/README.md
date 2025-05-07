@@ -1,3 +1,0 @@
-# USAGE
-使用sentencepiece和huggingface transformers分别进行tokenizer的训练
-support BPE and BBPE
