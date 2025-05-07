@@ -1,5 +1,5 @@
 from transformers import PretrainedConfig
-import logging
+from transformers import logging
 
 logger = logging.getLogger(__name__)
 
