@@ -5,12 +5,11 @@ from torch import nn
 from src_llm.configuration_dolly import DollyConfig
 from src_llm.modeling_dolly import DollyModel
 # model = DollyModel(DollyConfig())
-# model.save_pretrained("./my_model")
-# model.config.save_pretrained("./my_model")
+# model.save_pretrained("./dolly_model")
+# model.config.save_pretrained("./dolly_model")
 
-config = DollyConfig.from_pretrained("./my_model")
-model = DollyModel.from_pretrained("./my_model", config=config)
-
+config = DollyConfig.from_pretrained("./dolly_model")
+model = DollyModel.from_pretrained("./dolly_model", config=config)
 
 # input_ids = torch.tensor([[101, 1024, 102]]).long() 
 # outputs = model(input_ids)
