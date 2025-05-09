@@ -23,20 +23,24 @@ class DollyRMSNorm(nn.Module):
     '''
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
+
         # 也是RMSNorm可学习的参数，参数量为hidden_size
         self.weight = nn.Parameter(torch.ones(hidden_size))
+
         #添加一个非零值，防止除零
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
+
         #x=(x^2)/n
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        #hidden_states=hidden_states/(x+eps)^0.5
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        #对hidden_states进行缩放
-        return self.weight * hidden_states.to(input_dtype)
+
+        #归一化并缩放
+        hidden_states = (hidden_states * torch.rsqrt(variance + self.variance_epsilon)) * self.weight
+
+        return hidden_states.to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -46,11 +50,11 @@ class DollyMLP(nn.Module):
     DollyMLP层的实现, code from Qwen3
     可训练参数量为: hidden_size * intermediate_size + hidden_size * intermediate_size + intermediate_size * hidden_size
     '''
-    def __init__(self, config):
+    #只传入需要的三个参数
+    def __init__(self, hidden_size,intermediate_size,hidden_act):
         super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         #可训练参数量 hidden_size * intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         #可训练参数量 hidden_size * intermediate_size
@@ -58,7 +62,7 @@ class DollyMLP(nn.Module):
         #可训练参数量 intermediate_size * hidden_size
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         #默认激活函数SiLU，=Sigmoid*x,输出范围(0, ∞)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[hidden_act]
 
     def forward(self, x):
         #通过激活函数后的向量[batch_size*seq_len*intermediate_size]和扩展后的向量进行元素乘
@@ -237,7 +241,7 @@ class DollyDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = DollyAttention(config=config, layer_idx=layer_idx)
-        self.mlp = DollyMLP(config)
+        self.mlp = DollyMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
         self.input_layernorm = DollyRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DollyRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         if (
