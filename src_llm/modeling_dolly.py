@@ -17,36 +17,51 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutpu
 from transformers.cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 logger = logging.get_logger(__name__)
 class DollyRMSNorm(nn.Module):
+    '''
+    DollyRMSNorm code from Qwen3
+    可训练参数量为: hidden_size
+    '''
     def __init__(self, hidden_size, eps=1e-6):
-        """
-        Qwen3RMSNorm is equivalent to T5LayerNorm
-        """
         super().__init__()
+        # 也是RMSNorm可学习的参数，参数量为hidden_size
         self.weight = nn.Parameter(torch.ones(hidden_size))
+        #添加一个非零值，防止除零
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
+        #x=(x^2)/n
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        #hidden_states=hidden_states/(x+eps)^0.5
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        #对hidden_states进行缩放
         return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
     
 class DollyMLP(nn.Module):
+    '''
+    DollyMLP层的实现, code from Qwen3
+    可训练参数量为: hidden_size * intermediate_size + hidden_size * intermediate_size + intermediate_size * hidden_size
+    '''
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
+        #可训练参数量 hidden_size * intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        #可训练参数量 hidden_size * intermediate_size
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        #可训练参数量 intermediate_size * hidden_size
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        #默认激活函数SiLU，=Sigmoid*x,输出范围(0, ∞)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
+        #通过激活函数后的向量[batch_size*seq_len*intermediate_size]和扩展后的向量进行元素乘
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -80,7 +95,6 @@ class DollyRotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
-
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -91,25 +105,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
+ 
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -118,10 +114,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
+   
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
@@ -654,37 +647,7 @@ class Qwen3ForCausalLM(DollyPreTrainedModel, GenerationMixin):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> CausalLMOutputWithPast:
-        r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, Qwen3ForCausalLM
-
-        >>> model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-8B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-8B")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
+       
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -752,12 +715,7 @@ class Qwen3ForSequenceClassification(DollyPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> SequenceClassifierOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+      
 
         transformer_outputs: BaseModelOutputWithPast = self.model(
             input_ids,
@@ -844,12 +802,7 @@ class Qwen3ForTokenClassification(DollyPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+       
 
         outputs: BaseModelOutputWithPast = self.model(
             input_ids,
@@ -908,16 +861,6 @@ class Qwen3ForQuestionAnswering(DollyPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
 
         outputs: BaseModelOutputWithPast = self.transformer(
             input_ids,
