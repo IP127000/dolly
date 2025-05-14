@@ -394,10 +394,13 @@ class DollyModel(DollyPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
+        #是否输出attention的计算结果
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        #是否输出隐藏层状态
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        #是否使用cache
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -433,17 +436,18 @@ class DollyModel(DollyPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
+        #共享RoPE位置编码
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # decoder layers
+        # 否是输出hidden state
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-
+        #transformer的计算：
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
+            #如果启用了梯度检查点，并且处于训练模式下，模型将调用 self._gradient_checkpointing_func，
+            # 该函数使用 partial 函数来计算并重新计算部分前向过程，从而节省内存。
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     partial(decoder_layer.__call__, **flash_attn_kwargs),
@@ -473,13 +477,13 @@ class DollyModel(DollyPreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-
+        #归一化
         hidden_states = self.norm(hidden_states)
 
-        # add hidden states from the last decoder layer
+        # 添加最后一层hidden_states
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
+        #将结果打包为BaseModelOutputWithPast数据结构
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
@@ -495,13 +499,13 @@ class DollyModel(DollyPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
+        #处理batch生成时padding问题
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
                 is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
                 if is_padding_right:
                     raise ValueError(
                         "You are attempting to perform batched generation with padding_side='right'"
-                        " this may lead to unexpected behaviour for Flash Attention version of Qwen3. Make sure to "
                         " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                     )
             if attention_mask is not None and 0.0 in attention_mask:
@@ -563,9 +567,6 @@ class DollyModel(DollyPreTrainedModel):
             and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
@@ -582,30 +583,6 @@ class DollyModel(DollyPreTrainedModel):
         config: DollyConfig,
         past_key_values: Cache,
     ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-            config (`Qwen3Config`):
-                The model's configuration class
-            past_key_values (`Cache`):
-                The cache class that is being used currently to generate
-        """
         if attention_mask is not None and attention_mask.dim() == 4:
             # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
             causal_mask = attention_mask
