@@ -1,7 +1,7 @@
 from transformers import PretrainedConfig
 from transformers import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 class DollyConfig(PretrainedConfig):
     model_type = "dolly"
