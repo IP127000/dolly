@@ -1,4 +1,4 @@
-from configuration_dolly import DollyConfig
+from .configuration_dolly import DollyConfig
 from transformers.modeling_utils import PreTrainedModel, ALL_ATTENTION_FUNCTIONS
 from functools import partial
 from typing import Callable, Optional, Tuple, Union
@@ -23,23 +23,18 @@ class DollyRMSNorm(nn.Module):
     '''
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
-
         # 也是RMSNorm可学习的参数，参数量为hidden_size
         self.weight = nn.Parameter(torch.ones(hidden_size))
-
         #添加一个非零值，防止除零
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
-
         #x=(x^2)/n
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
-
         #归一化并缩放
         hidden_states = (hidden_states * torch.rsqrt(variance + self.variance_epsilon)) * self.weight
-
         return hidden_states.to(input_dtype)
 
     def extra_repr(self):
@@ -74,43 +69,57 @@ class DollyRotaryEmbedding(nn.Module):
         super().__init__()
 
         #获取"rope_type"的值，如果没有使用"default"
-        self.rope_type = config.rope_scaling.get("rope_type", "default")
-
-        self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.original_max_seq_len = config.max_position_embeddings
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        #得到频率倒数
+        #得到频率倒数,基础版本公式如下：
+        #inv_freq = 1.0 / (rope_theta ** (torch.arange(0, dim, 2) / dim))
+        #得到一个长度为attention_dim/2的小数序列，如attention_dim=128,inv_freq=64
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         #注册缓存区
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         
-
     @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
+        #将inv_freq进行维度扩展首先扩展为1*64*1，然后扩展为batch_size*64*1
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        #position_ids进行扩展batch_size* 1*seq_len
         position_ids_expanded = position_ids[:, None, :].float()
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        #强制float32，禁止混合精度
+        with torch.autocast(device_type=device_type, enabled=False):  
+            #矩阵乘以后，形状变为batch_size*64*seq_len后，再转为batch_size*seq_len*64
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            #沿64的维度进行拼接batch_size*seq_len*128
             emb = torch.cat((freqs, freqs), dim=-1)
+            #emb的cos()部分乘缩放系数:batch_size*seq_len*128
             cos = emb.cos() * self.attention_scaling
+            #emb的sin()部分乘缩放系数:batch_size*seq_len*128
             sin = emb.sin() * self.attention_scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def rotate_half(x):
+    #x分为两段，各取batch_size*heads_num*seq_len*64
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
+    #下部分*-1,按下+上重新组合x
     return torch.cat((-x2, x1), dim=-1)
 
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     '''
     对q和k使用RoPE
     '''
+    #由batch_size*seq_len*128增加一个维度变为batch_size*1*seq_len*128
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
+    #q:batch_size*heads_num*seq_len*128和sin及con进行元素乘batch_size*1*seq_len*128
+    #cos部分直接乘，sin部分进行位置变化后再乘，最后相加完成位置编码的嵌入
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
