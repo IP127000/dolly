@@ -5,6 +5,9 @@ LLM-Dolly is a custom LLM built from scratch
 ## 🗓️ 更新日志
 
 #### 2025-05-09
+- ✅ 将dolly_llm作为pip包，可进行安装
+
+#### 2025-05-09
 - 📝 优化[RMSNorm](https://arxiv.org/pdf/1910.07467)、MLP、[RoPE](https://arxiv.org/pdf/2104.09864)代码。
 
 #### 2025-05-07
