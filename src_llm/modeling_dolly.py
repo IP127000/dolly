@@ -18,12 +18,12 @@ from transformers.cache_utils import Cache, DynamicCache, SlidingWindowCache, St
 logger = logging.get_logger(__name__)
 class DollyRMSNorm(nn.Module):
     '''
-    DollyRMSNorm code from Qwen3
-    可训练参数量为: hidden_size
+    输入的形状为batch_size*heads*seq_len*heads_dim,
+    仅在最后一个维度进行归一化，
+    参数量为heads_dim
     '''
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
-        # 也是RMSNorm可学习的参数，参数量为hidden_size
         self.weight = nn.Parameter(torch.ones(hidden_size))
         #添加一个非零值，防止除零
         self.variance_epsilon = eps
@@ -74,6 +74,7 @@ class DollyRotaryEmbedding(nn.Module):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
+        # self.rope_type = getattr(config, "rope_type", "default")
         self.original_max_seq_len = config.max_position_embeddings
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         #得到频率倒数,基础版本公式如下：
@@ -113,7 +114,7 @@ def rotate_half(x):
 
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     '''
-    对q和k使用RoPE
+    对q和k分别使用RoPE
     '''
     #由batch_size*seq_len*128增加一个维度变为batch_size*1*seq_len*128
     cos = cos.unsqueeze(unsqueeze_dim)
@@ -126,10 +127,16 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-   
+    '''
+    在GQA中, k和v的heads数量小于q的heads数量, 
+    所以在进行attention计算前需要进行repeat_kv操作, 
+    保持第2维度的数量相等,n=config.num_attention_heads // config.num_key_value_heads
+    '''
+    #GQA中num_key_value_heads的数量小于attention heads数量
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
+    #在第3维度[index=2]进行扩充
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
@@ -143,49 +150,63 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
+    #repeat kv，确保形状和query一致
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
-
+    #计算attention score
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    #casual attention
     if attention_mask is not None:
+        #causal_mask应当为下三角为0，上三角为负无穷
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
-
+    # sofmax计算
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    # 训练时给attn_weights的随机位置置零
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    #乘value过程
     attn_output = torch.matmul(attn_weights, value_states)
+    #最后转置，形状变为batch_size*seq_len*num_heads*head_dim
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
 
 
 class DollyAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
+    """
+    Attention in transformer
+    """
     def __init__(self, config: DollyConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        #num_key_value_groups即repeat kv的n
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        #attention socre的缩放系数
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-
+        #Q权重矩阵
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
+        #K权重矩阵
         self.k_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
+        #V权重矩阵
         self.v_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
+        #Attention的最后一步，线性连接层
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = DollyRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = DollyRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+        #给输入q和k进行归一化操作，使用RMSNom，注意仅在最后一个维度进行归一化，参数量为head_dim
+        self.q_norm = DollyRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = DollyRMSNorm(self.head_dim, eps=config.rms_norm_eps) 
+        #支持滑动窗口
         self.sliding_window = config.sliding_window
         if not (
             self.config.use_sliding_window
@@ -203,18 +224,22 @@ class DollyAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        #input_shape: batch_size* seq_len
         input_shape = hidden_states.shape[:-1]
+        #hidden_shape: batch_size* seq_len*-1* head_dim
         hidden_shape = (*input_shape, -1, self.head_dim)
-
+        #将输入经过Q矩阵变为query，然后调整形状为batch_size* seq_len*-1* head_dim，然后进行归一化，再调整形状batch_size* -1*seq_len* head_dim
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        #将输入经过K矩阵变为key，然后调整形状为batch_size* seq_len*-1* head_dim，然后进行归一化，再调整形状batch_size* -1*seq_len* head_dim
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        #将输入经过V矩阵变为value，然后调整形状为batch_size* seq_len*-1* head_dim，再调整形状batch_size* -1*seq_len* head_dim
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
+        #得到嵌入旋转位置编码信息后的query和key
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
+        
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            # KVCache的cache更新位置信息和kv值
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -227,7 +252,7 @@ class DollyAttention(nn.Module):
                 )
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
+        #attention的具体计算，返回结果和中间的attention score
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -236,11 +261,12 @@ class DollyAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,  # diff with Llama
+            sliding_window=self.sliding_window,  
             **kwargs,
         )
-
+        #将batch_size*seq_len*num_heads*head_dim 变为 batch_size*seq_len*hiddent_size
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        #attention的线性层
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -252,13 +278,9 @@ class DollyDecoderLayer(nn.Module):
         self.mlp = DollyMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
         self.input_layernorm = DollyRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DollyRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        if (
-            config.sliding_window and config._attn_implementation != "flash_attention_2"
-        ):  # diff with Llama is this warning
-            logger.warning_once(
-                f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
-                "unexpected results may be encountered."
-            )
+        #仅flash_attention_2支持滑动窗口
+        if config.sliding_window and config._attn_implementation != "flash_attention_2":
+           config.sliding_window = None
 
     def forward(
         self,
@@ -269,14 +291,15 @@ class DollyDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None, 
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        #保留最开始的值，后面做残差网络
         residual = hidden_states
-
+        #step1:归一化
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
+        #step2: Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -288,21 +311,23 @@ class DollyDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             **kwargs,
         )
+        #step3:残差
         hidden_states = residual + hidden_states
-
-        # Fully Connected
         residual = hidden_states
+        #step4:归一化
         hidden_states = self.post_attention_layernorm(hidden_states)
+        #step5:MLP
         hidden_states = self.mlp(hidden_states)
+        #step6:残差
         hidden_states = residual + hidden_states
-
         outputs = (hidden_states,)
+        #是否输出attention weights
         if output_attentions:
             outputs += (self_attn_weights,)
-
         return outputs
 
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
 class DollyPreTrainedModel(PreTrainedModel):
     config_class = DollyConfig
     base_model_prefix = "model"
@@ -320,10 +345,12 @@ class DollyPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
+            #初始线性层化权重参数
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
+            #初始化embedding层参数
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
@@ -333,15 +360,18 @@ class DollyModel(DollyPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
+        #embedding层
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        #transformer层
         self.layers = nn.ModuleList(
             [DollyDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        #RMSNorm层
         self.norm = DollyRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        #RoPE层
         self.rotary_emb = DollyRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-
+        #进行模型初始化
         self.post_init()
 
     def get_input_embeddings(self):
@@ -610,7 +640,7 @@ class DollyModel(DollyPreTrainedModel):
         return causal_mask
     
 
-class Qwen3ForCausalLM(DollyPreTrainedModel, GenerationMixin):
+class DollyForCausalLM(DollyPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
