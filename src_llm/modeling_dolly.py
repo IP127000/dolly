@@ -703,9 +703,7 @@ class DollyForCausalLM(DollyPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-
-
-class Qwen3ForSequenceClassification(DollyPreTrainedModel):
+class DollyForSequenceClassification(DollyPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -734,7 +732,6 @@ class Qwen3ForSequenceClassification(DollyPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> SequenceClassifierOutputWithPast:
-      
 
         transformer_outputs: BaseModelOutputWithPast = self.model(
             input_ids,
@@ -785,7 +782,7 @@ class Qwen3ForSequenceClassification(DollyPreTrainedModel):
         )
 
 
-class Qwen3ForTokenClassification(DollyPreTrainedModel):
+class Dolly3ForTokenClassification(DollyPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -822,7 +819,6 @@ class Qwen3ForTokenClassification(DollyPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> TokenClassifierOutput:
        
-
         outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,
@@ -849,7 +845,7 @@ class Qwen3ForTokenClassification(DollyPreTrainedModel):
         )
 
 
-class Qwen3ForQuestionAnswering(DollyPreTrainedModel):
+class DollyForQuestionAnswering(DollyPreTrainedModel):
     base_model_prefix = "transformer"
 
     def __init__(self, config):
@@ -892,7 +888,6 @@ class Qwen3ForQuestionAnswering(DollyPreTrainedModel):
         )
 
         sequence_output = outputs.last_hidden_state
-
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1).contiguous()
