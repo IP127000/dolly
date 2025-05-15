@@ -782,7 +782,7 @@ class DollyForSequenceClassification(DollyPreTrainedModel):
         )
 
 
-class Dolly3ForTokenClassification(DollyPreTrainedModel):
+class DollyForTokenClassification(DollyPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
