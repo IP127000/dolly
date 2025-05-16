@@ -1,0 +1,1 @@
+spm_train --input=corpus/wikipedia.txt --model_prefix=tokenizer_zh --vocab_size=32000 --num_threads=8
