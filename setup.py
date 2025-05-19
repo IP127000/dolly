@@ -6,12 +6,26 @@ setup(
     packages=find_packages(include=["src_llm"]),  
     install_requires=[
         "torch==2.3.1",
+<<<<<<< HEAD
         "datasets==3.6.0",
+=======
+<<<<<<< HEAD
+=======
+        "datasets==3.6.0",
+>>>>>>> fc9eefc (add pretrain code)
+>>>>>>> 11473a798f338efdf3f70d665a00810099f51174
         "sentencepiece==0.2.0",
         "protobuf==3.20.0",
         "transformers==4.51.3",
         "tokenizers==0.21.1",
+<<<<<<< HEAD
         "setuptools",
+=======
+<<<<<<< HEAD
+=======
+        "accelerate==1.7.0",
+>>>>>>> fc9eefc (add pretrain code)
+>>>>>>> 11473a798f338efdf3f70d665a00810099f51174
         ],  
     author="IP127000",  
     author_email="hanluzhi@outlook.com", 
