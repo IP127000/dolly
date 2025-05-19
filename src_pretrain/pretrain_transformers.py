@@ -18,15 +18,32 @@ logger = logging.getLogger(__name__)
 accelerator = Accelerator()
 set_seed(42)
 
-model_name = "/mnt/han.luzhi/weights_llm"  
-
+model_name = "/mnt/han.luzhi/dolly_llm/weights_llm"  
+# resume_option = None                     
+resume_option = True                    
+# resume_option = "/mnt/han.luzhi/result/checkpoint-500"  
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-model = DollyForCausalLM.from_pretrained(model_name)
+if isinstance(resume_option, str) and os.path.exists(resume_option):
+    logger.info(f"从指定检查点 {resume_option} 加载模型...")
+    model = DollyForCausalLM.from_pretrained(resume_option)
+elif resume_option is True and os.path.exists("/mnt/han.luzhi/dolly_llm/result"):
+    latest_checkpoint = Trainer.find_latest_checkpoint("/mnt/han.luzhi/dolly_llm/result")
+    if latest_checkpoint:
+        logger.info(f"自动发现最新检查点 {latest_checkpoint}...")
+        model = DollyForCausalLM.from_pretrained(latest_checkpoint)
+    else:
+        logger.info("未找到检查点，从预训练模型加载...")
+        model = DollyForCausalLM.from_pretrained(model_name)
+else:
+    logger.info(f"从预训练模型 {model_name} 加载...")
+    model = DollyForCausalLM.from_pretrained(model_name)
+
 model.gradient_checkpointing_enable()
-dataset = load_dataset('text', data_files={'train': '/mnt/han.luzhi/corpus/wikipedia.txt'})
+
+dataset = load_dataset('text', data_files={'train': '/mnt/han.luzhi/dolly_llm/corpus/wikipedia.txt'})
 
 def preprocess_function(examples):
     return tokenizer(
@@ -50,14 +67,14 @@ data_collator = DataCollatorForLanguageModeling(
 )
 
 training_args = TrainingArguments(
-    output_dir="/mnt/han.luzhi/result",
+    output_dir="/mnt/han.luzhi/dolly_llm/result",
     do_eval=False,  
     save_strategy="steps", 
     save_steps=500,
     learning_rate=5e-5,
     per_device_train_batch_size=26,
     num_train_epochs=5,
-    logging_dir="/mnt/han.luzhi/logs",
+    logging_dir="/mnt/han.luzhi/dolly_llm/logs",
     logging_steps=10,
     save_total_limit=2,
     fp16=True, 
@@ -89,11 +106,11 @@ logger.info(f" 进程数 = {accelerator.num_processes}")
 logger.info(f" 设备 = {accelerator.device}")
 logger.info(f" 总批大小 = {training_args.per_device_train_batch_size * accelerator.num_processes * training_args.gradient_accumulation_steps}")
 
-trainer.train()
+trainer.train(resume_from_checkpoint=resume_option)
 
 if accelerator.is_main_process: 
-    trainer.save_model("/mnt/han.luzhi/result/final")
-    tokenizer.save_pretrained("/mnt/han.luzhi/result/final")
+    trainer.save_model("/mnt/han.luzhi/dolly_llm/result/final")
+    tokenizer.save_pretrained("/mnt/han.luzhi/dolly_llm/result/final")
     logger.info("***** 训练完成，模型已保存 *****")
 
 ##  python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=12345 pretrain_transformers.py
