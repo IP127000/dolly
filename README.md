@@ -4,8 +4,11 @@ LLM-Dolly is a custom LLM built from scratch
 
 ## 🗓️ 更新日志
 
+#### 2025-05-16
+- 📝 添加dolly_llm的预训练代码，进行一次预训练测试：模型0.6B，语料500M，46GB*4显卡.
+
 #### 2025-05-14
-- ✅ 优化[Attention]代码，同时将dolly_llm作为pip包，进行安装
+- ✅ 将dolly_llm作为pip包，进行安装
 
 #### 2025-05-09
 - 📝 优化[RMSNorm](https://arxiv.org/pdf/1910.07467)、MLP、[RoPE](https://arxiv.org/pdf/2104.09864)代码。
