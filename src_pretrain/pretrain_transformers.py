@@ -11,7 +11,6 @@ from datasets import load_dataset
 from accelerate import Accelerator
 import os
 import logging
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -20,8 +19,9 @@ set_seed(42)
 
 model_name = "/mnt/han.luzhi/dolly_llm/weights_llm"  
 # resume_option = None                     
-resume_option = True                    
-# resume_option = "/mnt/han.luzhi/result/checkpoint-500"  
+# resume_option = True                    
+resume_option = "/mnt/han.luzhi/dolly_llm/result/checkpoint-59000"  
+# resume_option = "/mnt/han.luzhi/dolly_llm/result/final" 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
@@ -29,15 +29,8 @@ if tokenizer.pad_token is None:
 if isinstance(resume_option, str) and os.path.exists(resume_option):
     logger.info(f"从指定检查点 {resume_option} 加载模型...")
     model = DollyForCausalLM.from_pretrained(resume_option)
-elif resume_option is True and os.path.exists("/mnt/han.luzhi/dolly_llm/result"):
-    latest_checkpoint = Trainer.find_latest_checkpoint("/mnt/han.luzhi/dolly_llm/result")
-    if latest_checkpoint:
-        logger.info(f"自动发现最新检查点 {latest_checkpoint}...")
-        model = DollyForCausalLM.from_pretrained(latest_checkpoint)
-    else:
-        logger.info("未找到检查点，从预训练模型加载...")
-        model = DollyForCausalLM.from_pretrained(model_name)
 else:
+    logger.info("未找到检查点，从预训练模型加载...")
     logger.info(f"从预训练模型 {model_name} 加载...")
     model = DollyForCausalLM.from_pretrained(model_name)
 
@@ -58,7 +51,7 @@ tokenized_datasets = dataset.map(
     preprocess_function,
     batched=True,
     remove_columns=['text'], 
-    num_proc=4  
+    num_proc=16  
 )
 
 data_collator = DataCollatorForLanguageModeling(
@@ -78,7 +71,7 @@ training_args = TrainingArguments(
     logging_steps=10,
     save_total_limit=2,
     fp16=True, 
-    dataloader_num_workers=4,
+    dataloader_num_workers=3,
     gradient_accumulation_steps=2, 
     report_to="tensorboard",  
     optim="adamw_torch",  

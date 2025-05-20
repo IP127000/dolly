@@ -5,7 +5,7 @@ LLM-Dolly is a custom LLM built from scratch
 ## 🗓️ 更新日志
 
 #### 2025-05-19
-- 📝 添加支持使用deepspeed训练代码.
+- 📝 添加支持使用deepspeed训练代码，测试训练中最大batch_size提升38%，训练速度提升9.6%.
 
 #### 2025-05-16
 - 📝 添加dolly_llm的预训练代码，进行一次预训练测试：模型0.6B，语料500M，46GB*4显卡.
