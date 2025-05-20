@@ -1,5 +1,6 @@
 corpus/wikipedia-cn-20230720-filtered.json
 corpus/wikipedia.txt
+corpus/*.jsonl
 dolly_env_local
 llm_dolly.egg-info
 src_llm/__pycache__
