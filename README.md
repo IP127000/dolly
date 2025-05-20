@@ -4,6 +4,9 @@ LLM-Dolly is a custom LLM built from scratch
 
 ## 🗓️ 更新日志
 
+#### 2025-05-20
+- 📝 添加支持jsonl文件训练.
+
 #### 2025-05-19
 - 📝 添加支持使用deepspeed训练代码，测试训练中最大batch_size提升38%，训练速度提升9.6%.
 
