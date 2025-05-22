@@ -1,28 +1,28 @@
 from transformers import PretrainedConfig
 from transformers import logging
-
+from transformers.modeling_rope_utils import rope_config_validation
 logger = logging.get_logger(__name__)
 
-class DollyConfig(PretrainedConfig):
-    model_type = "dolly"
+
+class DollyMoEConfig(PretrainedConfig):
+    model_type = "dolly_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
-
-    # 添加张量并行配置
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",  # self-attention 的查询投影使用列并行
-        "layers.*.self_attn.k_proj": "colwise",  # self-attention 的键投影使用列并行
-        "layers.*.self_attn.v_proj": "colwise",  # self-attention 的值投影使用列并行
-        "layers.*.self_attn.o_proj": "rowwise",  # self-attention 的输出投影使用行并行
-        "layers.*.mlp.gate_proj": "colwise",    # MLP 的门投影使用列并行
-        "layers.*.mlp.up_proj": "colwise",      # MLP 的上升投影使用列并行
-        "layers.*.mlp.down_proj": "rowwise",    # MLP 的下降投影使用行并行
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.*.gate_proj": "colwise",
+        "layers.*.mlp.experts.*.up_proj": "colwise",
+        "layers.*.mlp.experts.*.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
-
-    # 添加模型并行配置
     base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),  # 输入 ID 使用 embed_tokens 层生成嵌入
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),  # layers 层的输入输出
-        "norm": (["hidden_states"], ["hidden_states"]),  # 标准化层的输入输出
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     def __init__(
@@ -33,7 +33,6 @@ class DollyConfig(PretrainedConfig):
         num_hidden_layers=28,
         num_attention_heads=16,
         num_key_value_heads=8,
-        head_dim=128,
         hidden_act="silu",
         max_position_embeddings=32768,
         initializer_range=0.02,
@@ -47,6 +46,14 @@ class DollyConfig(PretrainedConfig):
         sliding_window=4096,
         max_window_layers=28,
         attention_dropout=0.0,
+        decoder_sparse_step=1,
+        moe_intermediate_size=768,
+        num_experts_per_tok=4,
+        num_experts=8,
+        norm_topk_prob=False,
+        output_router_logits=False,
+        router_aux_loss_coef=0.001,
+        mlp_only_layers=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -56,15 +63,10 @@ class DollyConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window  # we check `use_sliding_window` in the modeling code
+        self.sliding_window = sliding_window if use_sliding_window else None
         self.max_window_layers = max_window_layers
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
         self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
@@ -73,15 +75,21 @@ class DollyConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_config_validation(self)
+        self.decoder_sparse_step = decoder_sparse_step
+        self.moe_intermediate_size = moe_intermediate_size
+        self.num_experts_per_tok = num_experts_per_tok
+        self.num_experts = num_experts
+        self.norm_topk_prob = norm_topk_prob
+        self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
+        self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 
-
-__all__ = ["DollyConfig"]
+__all__ = ["DollyMoEConfig"]
