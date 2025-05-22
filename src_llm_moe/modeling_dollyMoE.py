@@ -803,7 +803,8 @@ class DollyMoEForCausalLM(DollyMoEPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.vocab_size, **kwargs)
+        
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
@@ -812,7 +813,8 @@ class DollyMoEForCausalLM(DollyMoEPreTrainedModel, GenerationMixin):
                 self.num_experts_per_tok,
                 attention_mask,
             )
-        if labels is not None:
+
+            if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device) 
         return MoeCausalLMOutputWithPast(
             loss=loss,

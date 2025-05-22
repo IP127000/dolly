@@ -29,7 +29,7 @@ if tokenizer.pad_token is None:
 
 if isinstance(resume_option, str) and os.path.exists(resume_option):
     logger.info(f"从指定检查点 {resume_option} 加载模型...")
-    model = DollyForCausalLM.from_pretrained(resume_option)
+    model = DollyMoEForCausalLM.from_pretrained(resume_option)
 else:
     logger.info("未找到检查点，从预训练模型加载...")
     logger.info(f"从预训练模型 {model_name} 加载...")
@@ -116,5 +116,5 @@ if accelerator.is_main_process:
     tokenizer.save_pretrained("/mnt/han.luzhi/dolly/chechpoints_MoE/final")
     logger.info("***** 训练完成，模型已保存 *****")
 
-##  deepspeed --num_gpus=4 --master_port=12345 pretrain_transformers.py
-#   deepspeed --include="localhost:1,2,3" --master_port=12345 pretrain_transformers.py
+## deepspeed --num_gpus=4 --master_port=12345 pretrain_transformers.py
+#  CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --include="localhost:1,2,3" --master_port=12345 pretrain_transformers.py
