@@ -4,6 +4,9 @@ LLM-Dolly is a custom LLM built from scratch
 
 ## 🗓️ 更新日志
 
+#### 2025-05-26
+- 📝 增加LLM文档，涵盖LLM全周期技术点。
+
 #### 2025-05-22
 - 📝 添加支持MoE模型，训练资源占用不稳定，测试模型Experts=8, experts_per_tok=4,GPU显存从60%-94%跳动,单个GPU利用率0%-100%跳动。当调小batch_size后，显存占用稳定在90%，单个GPU利用率稳定在90%以上，偶现30%的利用率。
 
