@@ -4,6 +4,9 @@ LLM-Dolly is a custom LLM built from scratch
 
 ## 🗓️ 更新日志
 
+#### 2025-06-04
+- 📝 调整tokenizer的格式和训练方式，和qwen2的tokenizer风格保持一致
+
 #### 2025-05-26
 - 📝 增加LLM文档，涵盖LLM全周期技术点。
 
