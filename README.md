@@ -1,8 +1,8 @@
 # LLM-Dolly
 LLM-Dolly is a custom LLM built from scratch   
 持续优化更新中...
-<details>
-<summary>🗓️ 更新日志</summary>
+
+🗓️ 更新日志
 
 #### 2025-06-05
 - 📝 上传tokenizer的训练权重，调整tokenizer的格式和训练方式，和qwen2的tokenizer风格保持一致.
@@ -45,7 +45,6 @@ LLM-Dolly is a custom LLM built from scratch
 
 #### 2025-04-24
 - ✅ 测试从transformers构建自定义的LLM模型结构。
-</details>
 </details>
 
 ## 致谢
