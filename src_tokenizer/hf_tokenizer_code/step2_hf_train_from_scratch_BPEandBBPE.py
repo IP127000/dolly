@@ -20,81 +20,82 @@ def get_training_corpus():
                 if "text" in data:
                     yield data["text"]
 
-# 使用Path对象处理路径
-corpus_dir = Path("./corpus")
+
+corpus_dir = Path("./corpus/skypile_2020_head")
 jsonl_files = list(corpus_dir.glob("**/*.jsonl"))
 if not jsonl_files:
     raise ValueError("No training files found")
 
-# 使用Qwen2官方特殊标记
+
 special_tokens = [
     "<|endoftext|>",
     "<|im_start|>",
     "<|im_end|>",
 ]
 
-# 创建BPE tokenizer
+
 tokenizer = Tokenizer(models.BPE())
 
-# 使用Qwen2的normalizer配置
+
 tokenizer.normalizer = normalizers.Sequence([
     normalizers.NFKC(),
     normalizers.StripAccents(),
 ])
 
-# 简化预分词器：使用ByteLevel代替多个Split规则
-tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
-    add_prefix_space=False,  # 对齐Qwen2配置
-    use_regex=True
-)
 
-# 移除后处理器（Qwen2不需要特殊后处理）
-tokenizer.post_processor = None
+tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+    [
+        pre_tokenizers.Split(r"[\r\n]", "isolated"),   
+        pre_tokenizers.Split(r"\s?[A-Za-zµÀ-ÖØ-öø-ƺƼ-ƿǄ-ʓʕ-ʯͰ-ͳͶͷͻ-ͽͿΆΈ-ΊΌΎ-ΡΣ-ϵϷ-ҁҊ-ԯԱ-ՖႠ-ჅᎠ-Ᏽᏸ-ᏽᲐ-ᲺᲽ-Ჿᴀ-ᴫᵫ-ᵷᵹ-ᶚḀ-ἕἘ-Ἕἠ-ὅὈ-Ὅὐ-ὗὙὛὝὟ-ώᾀ-ᾴᾶ-ᾼιῂ-ῄῆ-ῌῐ-ΐῖ-Ίῠ-Ῥῲ-ῴῶ-ῼℂℇℊ-ℓℕℙ-ℝℤΩℨK-ℭℯ-ℴℹℼ-ℿⅅ-ⅉⅎↃↄⰀ-ⱻⱾ-ⳤⳫ-ⳮⳲⳳꙀ-ꙭꚀ-ꚛꜢ-ꝯꝱ-ꞇꞋ-ꞎꭰ-ꮿﬀ-ﬆﬓ-ﬗＡ-Ｚａ-ｚ𐐀-𐑏𐒰-𐓓𐓘-𐓻𐲀-𐲲𐳀-𐳲𑢠-𑣟𞤀-𞥃]+","isolated"), 
+        pre_tokenizers.Split(r"\s?[!-/:-~！-／：-～‘-‟　-。]+", "isolated"),   
+        pre_tokenizers.Split(r"\s+$", "isolated"), 
+        pre_tokenizers.Split("[一-龥ࠀ-一가-퟿]+","isolated"),
+        pre_tokenizers.Digits(individual_digits=True),
+        pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=False),
+    ])
 
-# 配置解码器
+# tokenizer.post_processor = None
+tokenizer.post_processor = processors.ByteLevel(use_regex=True, trim_offsets=False, add_prefix_space=True)
+
 tokenizer.decoder = decoders.ByteLevel(
     use_regex=True,
     trim_offsets=True,
-    add_prefix_space=False  # 对齐Qwen2的add_prefix_space配置
+    add_prefix_space=False  
 )
 
-# 配置训练器
+
 trainer = trainers.BpeTrainer(
     vocab_size=12800,
-    special_tokens=special_tokens,
-    min_frequency=2,  # 添加最小频率阈值
-    show_progress=True  # 显示进度条
+    special_tokens=special_tokens, 
+    show_progress=True  
 )
 
 print("Training tokenizer...")
 tokenizer.train_from_iterator(
     get_training_corpus(),
     trainer=trainer,
-    length=sum(1 for _ in get_training_corpus())  # 添加总长度用于进度显示
+    length=sum(1 for _ in get_training_corpus())  
 )
 
-# 创建PreTrainedTokenizerFast时添加Qwen2关键配置
 wrapped_tokenizer = PreTrainedTokenizerFast(
     tokenizer_object=tokenizer,
-    bos_token=None,  # 对齐Qwen2配置
+    bos_token=None,  
     eos_token="<|endoftext|>",
     pad_token="<|endoftext|>",
-    unk_token=None,  # 对齐Qwen2配置
+    unk_token=None,  
     additional_special_tokens=["<|im_start|>", "<|im_end|>"],
-    model_max_length=32768,  # 添加model_max_length
-    clean_up_tokenization_spaces=False,  # 对齐Qwen2配置
-    errors="replace",  # 对齐Qwen2配置
-    split_special_tokens=False,  # 对齐Qwen2配置
+    model_max_length=32768,  
+    clean_up_tokenization_spaces=False,  
+    errors="replace", 
+    split_special_tokens=False,  
 )
 
 output_dir = Path("./llm_tokenizer")
 output_dir.mkdir(exist_ok=True, parents=True)
 
-# 保存tokenizer
 wrapped_tokenizer.save_pretrained(output_dir)
 print(f"Tokenizer saved to {output_dir}")
 
-# 使用Qwen2官方chat_template
 QWEN2_CHAT_TEMPLATE = (
     "{% for message in messages %}"
     "{% if loop.first and messages[0]['role'] != 'system' %}"
@@ -107,13 +108,10 @@ QWEN2_CHAT_TEMPLATE = (
     "{% endif %}"
 )
 
-# 直接设置chat_template避免重新加载
 wrapped_tokenizer.chat_template = QWEN2_CHAT_TEMPLATE
 
-# 再次保存包含chat_template的配置
 wrapped_tokenizer.save_pretrained(output_dir)
 
-# 测试对话模板
 messages = [
     {"role": "user", "content": "你好！"},
     {"role": "assistant", "content": "你好，有什么可以帮您？"},
@@ -128,7 +126,11 @@ formatted = wrapped_tokenizer.apply_chat_template(
 print("\n格式化后的对话:")
 print(formatted)
 
-# 测试tokenization
 test_text = "深度学习是人工智能的一个重要分支。Deep learning is a subset of machine learning."
 print("\nTest tokenization:")
-print(wrapped_tokenizer.tokenize(test_text))
+encoded = wrapped_tokenizer.tokenize(test_text)
+print(encoded)
+print(encoded)
+decoded_text = wrapped_tokenizer.decode(encoded) 
+print(decoded_text)
+print(decoded_text)
