@@ -1,7 +1,8 @@
 {
-  "cls_token": "[CLS]",
-  "mask_token": "[MASK]",
-  "pad_token": "[PAD]",
-  "sep_token": "[SEP]",
-  "unk_token": "[UNK]"
+  "additional_special_tokens": [
+    "<|im_start|>",
+    "<|im_end|>"
+  ],
+  "eos_token": "<|endoftext|>",
+  "pad_token": "<|endoftext|>"
 }

@@ -1,7 +1,7 @@
 {
   "added_tokens_decoder": {
     "0": {
-      "content": "[UNK]",
+      "content": "<|endoftext|>",
       "lstrip": false,
       "normalized": false,
       "rstrip": false,
@@ -9,7 +9,7 @@
       "special": true
     },
     "1": {
-      "content": "[CLS]",
+      "content": "<|im_start|>",
       "lstrip": false,
       "normalized": false,
       "rstrip": false,
@@ -17,23 +17,7 @@
       "special": true
     },
     "2": {
-      "content": "[SEP]",
-      "lstrip": false,
-      "normalized": false,
-      "rstrip": false,
-      "single_word": false,
-      "special": true
-    },
-    "3": {
-      "content": "[PAD]",
-      "lstrip": false,
-      "normalized": false,
-      "rstrip": false,
-      "single_word": false,
-      "special": true
-    },
-    "4": {
-      "content": "[MASK]",
+      "content": "<|im_end|>",
       "lstrip": false,
       "normalized": false,
       "rstrip": false,
@@ -41,13 +25,19 @@
       "special": true
     }
   },
+  "additional_special_tokens": [
+    "<|im_start|>",
+    "<|im_end|>"
+  ],
+  "bos_token": null,
+  "chat_template": "{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful assistant<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}",
   "clean_up_tokenization_spaces": false,
-  "cls_token": "[CLS]",
+  "eos_token": "<|endoftext|>",
+  "errors": "replace",
   "extra_special_tokens": {},
-  "mask_token": "[MASK]",
-  "model_max_length": 1000000000000000019884624838656,
-  "pad_token": "[PAD]",
-  "sep_token": "[SEP]",
+  "model_max_length": 32768,
+  "pad_token": "<|endoftext|>",
+  "split_special_tokens": false,
   "tokenizer_class": "PreTrainedTokenizer",
-  "unk_token": "[UNK]"
+  "unk_token": null
 }
