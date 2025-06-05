@@ -5,7 +5,7 @@ LLM-Dolly is a custom LLM built from scratch
 🗓️ 更新日志
 
 #### 2025-06-05
-- 📝 上传tokenizer的训练权重，调整tokenizer的格式和训练方式，和qwen2的tokenizer风格保持一致.
+- 📝 上传tokenizer的训练权重（1.56字符/token），调整tokenizer的格式和训练方式，和qwen2的tokenizer风格保持一致.
 
 <details>
 <summary>查看更多</summary>
