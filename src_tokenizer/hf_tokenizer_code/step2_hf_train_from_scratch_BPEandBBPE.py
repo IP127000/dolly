@@ -11,9 +11,22 @@ from tokenizers import (
     Tokenizer,
 )
 from transformers import PreTrainedTokenizerFast
+import logging
+from tqdm import tqdm
+log_dir = "/mnt/hanluzhi/dolly/logs"
+os.makedirs(log_dir, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(), 
+        logging.FileHandler(os.path.join(log_dir, "training.log"))  
+    ]
+)
 
 def get_training_corpus():
-    for file_path in jsonl_files:
+    for file_path in tqdm(jsonl_files, desc="processing files", unit="file"):
         with open(file_path, "r", encoding="utf-8") as f:
             for line in f:
                 data = json.loads(line)
@@ -70,7 +83,7 @@ trainer = trainers.BpeTrainer(
     show_progress=True  
 )
 
-print("Training tokenizer...")
+logging.info("Training tokenizer...")
 tokenizer.train_from_iterator(
     get_training_corpus(),
     trainer=trainer,
@@ -89,12 +102,12 @@ wrapped_tokenizer = PreTrainedTokenizerFast(
     errors="replace", 
     split_special_tokens=False,  
 )
-
+logging.info("train done ")
 output_dir = Path("./llm_tokenizer")
 output_dir.mkdir(exist_ok=True, parents=True)
 
 wrapped_tokenizer.save_pretrained(output_dir)
-print(f"Tokenizer saved to {output_dir}")
+logging.info(f"Tokenizer saved to {output_dir}")
 
 QWEN2_CHAT_TEMPLATE = (
     "{% for message in messages %}"
@@ -123,14 +136,14 @@ formatted = wrapped_tokenizer.apply_chat_template(
     tokenize=False,
     add_generation_prompt=True
 )
-print("\n格式化后的对话:")
-print(formatted)
+logging.info("\n格式化后的对话:")
+logging.info(formatted)
 
 test_text = "深度学习是人工智能的一个重要分支。Deep learning is a subset of machine learning."
-print("\nTest tokenization:")
+logging.info("\nTest tokenization:")
 encoded = wrapped_tokenizer.tokenize(test_text)
-print(encoded)
-print(encoded)
+logging.info(encoded)
+logging.info(encoded)
 decoded_text = wrapped_tokenizer.decode(encoded) 
-print(decoded_text)
-print(decoded_text)
+logging.info(decoded_text)
+logging.info(decoded_text)
