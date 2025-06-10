@@ -1,8 +1,3 @@
-corpus/wikipedia-cn-20230720-filtered.json
-corpus/wikipedia.txt
-corpus/*/*.jsonl
-dolly_env_local
+corpus/*
 llm_dolly.egg-info
-src_llm/__pycache__
-weights_MoE
-weights_llm
+weights/*
