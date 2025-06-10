@@ -62,13 +62,13 @@ tokenizer = Tokenizer(BPE(unk_token=None))
 tokenizer.pre_tokenizer = ByteLevel(add_prefix_space=False)
 
 trainer = BpeTrainer(
-    vocab_size=151643,  
+    vocab_size=32000,  
     min_frequency=2,    
     special_tokens=SPECIAL_TOKENS,
     show_progress=True
 )
 
-corpus_files = 'corpus/train-*-of-00399.parquet' 
+corpus_files = glob.glob('corpus/parquet/train-0000*-of-00399.parquet' )
 tokenizer.train_from_iterator(
     iterator=read_parquet_shards(corpus_files),
     trainer=trainer,
