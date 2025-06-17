@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 accelerator = Accelerator()
 set_seed(42)
 
-model_name = "/mnt/han.luzhi/dolly/weights_MoE"  
+model_name = "../dolly/weights_MoE"  
 resume_option = None                     
 # resume_option = True                    
 # resume_option = "/mnt/han.luzhi/dolly_llm/checkpoints_ds/checkpoint-500"  
@@ -36,7 +36,7 @@ else:
     model = DollyMoEForCausalLM.from_pretrained(model_name)
 model.gradient_checkpointing_enable()
 
-data_files = glob.glob("/mnt/han.luzhi/dolly/corpus/*.jsonl")
+data_files = glob.glob("../dolly/corpus/*.jsonl")
 logger.info(f"找到训练语料: {data_files}")
 
 dataset = load_dataset('json', data_files=data_files, split='train')
@@ -65,15 +65,15 @@ data_collator = DataCollatorForLanguageModeling(
 )
 
 training_args = TrainingArguments(
-    output_dir="/mnt/han.luzhi/dolly/checkpoints_MoE",
-    deepspeed="/mnt/han.luzhi/dolly/deepspeed_config/ds_stage2.json",  
+    output_dir="../checkpoints_MoE",
+    deepspeed="../deepspeed_config/ds_stage2.json",  
     do_eval=False,
     save_strategy="steps",
     save_steps=500,
     learning_rate=1e-4,
     per_device_train_batch_size=16,
     num_train_epochs=2,
-    logging_dir="/mnt/han.luzhi/dolly/logs",
+    logging_dir="../dolly/logs",
     logging_steps=20,
     save_total_limit=2,
     fp16=True,  
@@ -112,8 +112,8 @@ else:
 
 
 if accelerator.is_main_process: 
-    trainer.save_model("/mnt/han.luzhi/dolly/chechpoints_MoE/final")
-    tokenizer.save_pretrained("/mnt/han.luzhi/dolly/chechpoints_MoE/final")
+    trainer.save_model("../chechpoints_MoE/final")
+    tokenizer.save_pretrained("../chechpoints_MoE/final")
     logger.info("***** 训练完成，模型已保存 *****")
 
 ## deepspeed --num_gpus=4 --master_port=12345 pretrain_transformers.py

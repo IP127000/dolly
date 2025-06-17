@@ -1,9 +1,9 @@
 import json
 import glob
-from tokenizers import Tokenizer
+from tokenizers import Tokenizer,Tokenizer, normalizers, pre_tokenizers,  processors, decoders
+from tokenizers.normalizers import NFC
 from tokenizers.models import BPE
 from tokenizers.trainers import BpeTrainer
-from tokenizers.pre_tokenizers import ByteLevel
 from transformers import PreTrainedTokenizerFast
 
 SPECIAL_TOKENS = [
@@ -65,17 +65,50 @@ def read_corpus(files, batch_size=1000):
             if batch:
                 yield batch
 
-tokenizer = Tokenizer(BPE(unk_token=None))
-tokenizer.pre_tokenizer = ByteLevel(add_prefix_space=False)
+tokenizer = Tokenizer(BPE(
+    unk_token=None,
+    continuing_subword_prefix="",
+    end_of_word_suffix="",
+    fuse_unk=False,
+    byte_fallback=False
+))
+tokenizer.normalizer = normalizers.Sequence([NFC()])
+regex_pattern = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+"""
+tokenizer.pre_tokenizer = pre_tokenizers.Sequence([
+    pre_tokenizers.Split(
+        pattern=pre_tokenizers.Regex(regex_pattern),
+        behavior="isolated",
+        invert=False
+    ),
+    pre_tokenizers.ByteLevel(
+        add_prefix_space=False,
+        trim_offsets=False,
+        use_regex=False
+    )
+])
 
-trainer = BpeTrainer(
-    vocab_size=151643,  
-    min_frequency=2,    
-    special_tokens=SPECIAL_TOKENS,
-    show_progress=True
+tokenizer.post_processor = processors.ByteLevel(
+    add_prefix_space=False,
+    trim_offsets=False,
+    use_regex=False
 )
 
-corpus_files = glob.glob("corpus/*.jsonl")  
+tokenizer.decoder = decoders.ByteLevel(
+    add_prefix_space=False,
+    trim_offsets=False,
+    use_regex=False
+)
+
+trainer = BpeTrainer(
+    vocab_size=32000,  
+    min_frequency=1,    
+    special_tokens=SPECIAL_TOKENS,
+    show_progress=True,
+    continuing_subword_prefix="",
+    end_of_word_suffix=""
+)
+
+corpus_files = glob.glob("../corpus/*.jsonl")  
 tokenizer.train_from_iterator(
     iterator=read_corpus(corpus_files),
     trainer=trainer,
@@ -91,7 +124,7 @@ fast_tokenizer = PreTrainedTokenizerFast(
     add_prefix_space=False,
     clean_up_tokenization_spaces=False,
     errors="replace",
-    model_max_length=131072,
+    model_max_length=1024,
     split_special_tokens=False,
     unk_token=None,
     bos_token=None,
@@ -101,7 +134,7 @@ CHAT_TEMPLATE = """{%- if tools %}\n    {{- '<|im_start|>system\\n' }}\n    {%- 
 
 fast_tokenizer.chat_template = CHAT_TEMPLATE
 
-save_path = "weights/weights_tokenizer/hf_tokenizer_BBPE"
+save_path = "../weights/weights_tokenizer/hf_tokenizer_BBPE"
 fast_tokenizer.save_pretrained(save_path)
 
 print(f"Tokenizer saved to {save_path}")

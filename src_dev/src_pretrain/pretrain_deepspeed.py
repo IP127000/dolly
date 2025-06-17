@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 accelerator = Accelerator()
 set_seed(42)
 
-model_name = "/mnt/han.luzhi/dolly_llm/weights_llm"  
+model_name = "../weights_llm"  
 resume_option = None                     
 # resume_option = True                    
-# resume_option = "/mnt/han.luzhi/dolly_llm/checkpoints_ds/checkpoint-500"  
+# resume_option = "../checkpoints_ds/checkpoint-500"  
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
@@ -36,11 +36,11 @@ else:
     model = DollyForCausalLM.from_pretrained(model_name)
 model.gradient_checkpointing_enable()
 
-data_files = glob.glob("/mnt/han.luzhi/dolly_llm/corpus/*.jsonl")
+data_files = glob.glob("../corpus/*.jsonl")
 logger.info(f"找到训练语料: {data_files}")
 
 dataset = load_dataset('json', data_files=data_files, split='train')
-# dataset = load_dataset('text', data_files={'train': '/mnt/han.luzhi/dolly_llm/corpus/wikipedia.txt'})
+# dataset = load_dataset('text', data_files={'train': '../corpus/wikipedia.txt'})
 
 def preprocess_function(examples):
     return tokenizer(
@@ -65,15 +65,15 @@ data_collator = DataCollatorForLanguageModeling(
 )
 
 training_args = TrainingArguments(
-    output_dir="/mnt/han.luzhi/dolly_llm/checkpoints_ds",
-    deepspeed="/mnt/han.luzhi/dolly_llm/deepspeed_config/ds_stage2.json",  
+    output_dir="../checkpoints_ds",
+    deepspeed="../deepspeed_config/ds_stage2.json",  
     do_eval=False,
     save_strategy="steps",
     save_steps=500,
     learning_rate=1e-4,
     per_device_train_batch_size=36,
     num_train_epochs=2,
-    logging_dir="/mnt/han.luzhi/dolly_llm/logs",
+    logging_dir="../logs",
     logging_steps=20,
     save_total_limit=2,
     fp16=True,  
@@ -112,8 +112,8 @@ else:
 
 
 if accelerator.is_main_process: 
-    trainer.save_model("/mnt/han.luzhi/dolly_llm/result/final")
-    tokenizer.save_pretrained("/mnt/han.luzhi/dolly_llm/result/final")
+    trainer.save_model("../result/final")
+    tokenizer.save_pretrained("../result/final")
     logger.info("***** 训练完成，模型已保存 *****")
 
 ##  deepspeed --num_gpus=4 --master_port=12345 pretrain_transformers.py

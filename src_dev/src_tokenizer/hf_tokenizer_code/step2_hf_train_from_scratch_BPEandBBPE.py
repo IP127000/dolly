@@ -13,7 +13,7 @@ from tokenizers import (
 from transformers import PreTrainedTokenizerFast
 import logging
 from tqdm import tqdm
-log_dir = "/mnt/hanluzhi/dolly/logs"
+log_dir = "../logs"
 os.makedirs(log_dir, exist_ok=True)
 
 logging.basicConfig(
