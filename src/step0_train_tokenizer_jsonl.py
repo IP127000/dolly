@@ -1,6 +1,6 @@
 import json
 import glob
-from tokenizers import Tokenizer,Tokenizer, normalizers, pre_tokenizers,  processors, decoders
+from tokenizers import Tokenizer,Tokenizer, normalizers, pre_tokenizers,  processors, decoders,Regex
 from tokenizers.normalizers import NFC
 from tokenizers.models import BPE
 from tokenizers.trainers import BpeTrainer
@@ -76,7 +76,7 @@ tokenizer.normalizer = normalizers.Sequence([NFC()])
 regex_pattern = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+"""
 tokenizer.pre_tokenizer = pre_tokenizers.Sequence([
     pre_tokenizers.Split(
-        pattern=pre_tokenizers.Regex(regex_pattern),
+        pattern=Regex(regex_pattern),
         behavior="isolated",
         invert=False
     ),
@@ -100,7 +100,7 @@ tokenizer.decoder = decoders.ByteLevel(
 )
 
 trainer = BpeTrainer(
-    vocab_size=32000,  
+    vocab_size=151936,  
     min_frequency=1,    
     special_tokens=SPECIAL_TOKENS,
     show_progress=True,

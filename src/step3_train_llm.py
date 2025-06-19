@@ -12,56 +12,38 @@ from accelerate import Accelerator
 import os
 import logging
 import glob
-
+from datasets import load_dataset, DatasetDict
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 accelerator = Accelerator()
 set_seed(42)
-
+TOKENS_DATA_DIR = "../corpus"
+tokenizer_path="../weights/weights_tokenizer"
 model_name = "../weights/weights_llm"  
-tokenizer_path=""
 resume_option = None
 first_time=True                     
 # resume_option = True                    
 # resume_option = "../checkpoints_ds/checkpoint-500" 
-if first_time:
-    model = DollyForCausalLM(DollyConfig()) 
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
-
-if isinstance(resume_option, str) and os.path.exists(resume_option):
-    logger.info(f"从指定检查点 {resume_option} 加载模型...")
-    model = DollyForCausalLM.from_pretrained(resume_option)
+    
+if first_time:
+    model = DollyForCausalLM(DollyConfig()) 
 else:
-    logger.info("未找到检查点，从预训练模型加载...")
-    logger.info(f"从预训练模型 {model_name} 加载...")
-    model = DollyForCausalLM.from_pretrained(model_name)
+    if isinstance(resume_option, str) and os.path.exists(resume_option):
+        logger.info(f"从指定检查点 {resume_option} 加载模型...")
+        model = DollyForCausalLM.from_pretrained(resume_option)
+    else:
+        logger.info("未找到检查点，从预训练模型加载...")
+        logger.info(f"从预训练模型 {model_name} 加载...")
+        model = DollyForCausalLM.from_pretrained(model_name)
+        
 model.gradient_checkpointing_enable()
 
-data_files = glob.glob("../corpus/*.jsonl")
-logger.info(f"找到训练语料: {data_files}")
-
-dataset = load_dataset('json', data_files=data_files, split='train')
-# dataset = load_dataset('text', data_files={'train': '../corpus/wikipedia.txt'})
-
-def preprocess_function(examples):
-    return tokenizer(
-        examples['text'],
-        truncation=True,
-        max_length=512,
-        padding='max_length',
-        return_tensors='pt'
-    )
-
-tokenized_datasets = dataset.map(
-    preprocess_function,
-    batched=True,
-    # remove_columns=['text'], 
-    remove_columns=dataset.column_names,
-    num_proc=16  
-)
+tokenized_datasets = DatasetDict.load_from_disk(TOKENS_DATA_DIR)["train"]
 
 data_collator = DataCollatorForLanguageModeling(
     tokenizer=tokenizer,
@@ -75,14 +57,14 @@ training_args = TrainingArguments(
     save_strategy="steps",
     save_steps=500,
     learning_rate=1e-4,
-    per_device_train_batch_size=36,
+    per_device_train_batch_size=16,
     num_train_epochs=2,
     logging_dir="../logs",
     logging_steps=20,
     save_total_limit=2,
     fp16=True,  
-    dataloader_num_workers=3,
-    gradient_accumulation_steps=2,
+    dataloader_num_workers=4,
+    gradient_accumulation_steps=4,
     report_to="tensorboard",
     optim="adamw_torch",
     lr_scheduler_type="cosine",

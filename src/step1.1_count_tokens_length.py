@@ -7,9 +7,8 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 DATA_DIR = "../corpus"
-STATS_FILE = "token_stats.json"  
-NUM_PROC = min(32, os.cpu_count())  
-SAMPLE_SIZE = 10000  #None       
+NUM_PROC = min(32, os.cpu_count())
+SAMPLE_SIZE = 10000  #None
 
 tokenizer = AutoTokenizer.from_pretrained("../weights/weights_tokenizer")
 if tokenizer.pad_token is None:
@@ -36,7 +35,7 @@ def process_file(file_path):
                 str(p): np.percentile(lengths, p)
                 for p in [50, 75, 90, 95, 99]
             },
-            "all_lengths": lengths  
+            "all_lengths": lengths
         }
     except Exception as e:
         print(f"处理 {file_path} 出错: {e}")
@@ -51,20 +50,20 @@ if __name__ == "__main__":
         for stat in tqdm(results, total=len(file_paths)):
             if stat is not None:
                 all_stats.append(stat)
-    
+
     all_lengths = []
     for stat in all_stats:
         all_lengths.extend(stat["all_lengths"])
-        stat.pop("all_lengths")  
-    
+        stat.pop("all_lengths")
+
     global_stats = {
         "total_samples": len(all_lengths),
         "global_mean": np.mean(all_lengths),
         "global_max": np.max(all_lengths),
         "global_95_percentile": np.percentile(all_lengths, 95),
-        "recommended_max_length": int(np.percentile(all_lengths, 95) * 1.05)  
+        "recommended_max_length": int(np.percentile(all_lengths, 95) * 1.05)
     }
-    
+
     print(f"\n{'='*50}")
     print("全局统计结果:")
     print(f"总样本数: {global_stats['total_samples']:,}")
